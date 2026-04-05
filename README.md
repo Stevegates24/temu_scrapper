@@ -18,6 +18,7 @@ Extract product details from Temu in one click and paste directly into Excel.
 
 Open [Temu Scrapper Extension Page](https://stevegates24.github.io/temu_scrapper/)
 
+For Chrome 👇: 
 [Click here to watch](https://app.guidde.com/share/playbooks/681cM1jpMRtc6kFGDUtf3K?origin=j9nzieZQaXhFkdeNcSjPAV4pwPz2&mode=videoOnly)
 
 or
@@ -28,6 +29,8 @@ or
 4. Enable **Developer Mode**
 5. Click **Load Unpacked**
 6. Select the `temu_scrapper-main` folder
+
+For FireFox: [Link to be uploaded soon]()
 
 ---
 
