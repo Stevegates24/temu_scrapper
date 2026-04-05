@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ── Light mode variables ── */
+    :root {
+      --orange: #FF6200; --orange-dk: #E05500; --orange-lt: #FF8C3A;
+      --bg: #FAFAFA; --surface: #FFFFFF; --border: #EDEDED;
+      --text: #1A1A1A; --muted: #888; --green: #1A9E3F; --red: #CC2200;
+      --hint-bg: #FFF5ED; --hint-border: #FFD9B8; --hint-text: #7A3A00;
+      --field-loaded-bg: #F6FFF8; --field-loaded-border: #D4EDDA;
+      --price-bg: #FFF8F2; --price-border: #FFD5B0;
+      --footer-border: #EDEDED; --footer-text: #BBBBBB; --footer-text-s: #999;
+      --progress-bg: #EDEDED;
+      --tag-local-bg: #E6F9EC; --tag-local-text: #1A7A35;
+      --tag-non-bg: #F0F0F0; --tag-non-text: #555;
+      --shadow-scrape: 0 3px 10px rgba(255,98,0,0.30);
+      --shadow-copy: 0 3px 10px rgba(0,0,0,0.15);
+      --copy-bg: #1A1A1A; --copy-text: #ffffff;
+    }
+
+    /* ── Dark mode variables ── */
+    .dark {
+      --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3e;
+      --text: #e8eaf5; --muted: #6b6f85; --green: #4ade80; --red: #f87171;
+      --hint-bg: #1f1508; --hint-border: #5a3010; --hint-text: #ffb07a;
+      --field-loaded-bg: #0e1f14; --field-loaded-border: #1a4428;
+      --price-bg: #1f1208; --price-border: #7a3a00;
+      --footer-border: #2a2d3e; --footer-text: #3a3d52; --footer-text-s: #6b6f85;
+      --progress-bg: #2a2d3e;
+      --tag-local-bg: #0e2a1a; --tag-local-text: #4ade80;
+      --tag-non-bg: #222536; --tag-non-text: #9399b0;
+      --shadow-scrape: 0 3px 10px rgba(255,98,0,0.20);
+      --shadow-copy: 0 3px 10px rgba(0,0,0,0.5);
+      --copy-bg: #2a2d3e; --copy-text: #e8eaf5;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+      width: 340px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, var(--orange) 0%, var(--orange-lt) 100%);
+      padding: 14px 16px 12px;
+      display: flex; align-items: center; gap: 11px;
+      position: relative; overflow: hidden;
+    }
+    .header::after {
+      content: ''; position: absolute; right: -20px; top: -20px;
+      width: 90px; height: 90px; border-radius: 50%;
+      background: rgba(255,255,255,0.08); pointer-events: none;
+    }
+    .header-icon {
+      width: 36px; height: 36px; background: rgba(255,255,255,0.2);
+      border-radius: 10px; display: flex; align-items: center;
+      justify-content: center; font-size: 19px; flex-shrink: 0;
+    }
+    .header-text h1 { font-size: 14px; font-weight: 700; color: #fff; letter-spacing: -0.2px; }
+    .header-text p  { font-size: 10.5px; color: rgba(255,255,255,0.78); margin-top: 1px; }
+    .version-badge {
+      background: rgba(255,255,255,0.18); color: rgba(255,255,255,0.9);
+      font-size: 9px; font-weight: 600; padding: 2px 7px;
+      border-radius: 20px; letter-spacing: 0.3px; flex-shrink: 0;
+    }
+
+    /* ── Theme toggle ── */
+    /* ── Theme toggle — proper iOS-style ── */
+    .toggle-wrap {
+      display: flex; align-items: center; gap: 5px;
+      flex-shrink: 0; margin-left: 4px;
+    }
+    .toggle-emoji { font-size: 11px; line-height: 1; }
+    .theme-toggle {
+      position: relative; flex-shrink: 0;
+      width: 40px; height: 22px;
+      background: rgba(0,0,0,0.30);
+      border: 1.5px solid rgba(255,255,255,0.30);
+      border-radius: 11px;
+      cursor: pointer;
+      padding: 0;
+      transition: background 0.25s, border-color 0.25s;
+    }
+    .dark .theme-toggle {
+      background: #4f46e5;
+      border-color: rgba(255,255,255,0.20);
+    }
+    .theme-toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+      transition: transform 0.25s cubic-bezier(.4,0,.2,1);
+    }
+    .dark .theme-toggle::after {
+      transform: translateX(18px);
+    }
+
+    /* ── Body ── */
+    .body { padding: 14px 14px 12px; }
+
+    .col-hint {
+      background: var(--hint-bg); border: 1px solid var(--hint-border);
+      border-radius: 7px; padding: 7px 10px;
+      font-size: 10px; color: var(--hint-text);
+      line-height: 1.6; margin-bottom: 12px;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+    .col-hint strong { color: var(--orange-dk); }
+    .dark .col-hint strong { color: var(--orange-lt); }
+
+    .progress-bar {
+      height: 2px; background: var(--progress-bg);
+      border-radius: 2px; margin-bottom: 12px; overflow: hidden; display: none;
+      transition: background 0.2s;
+    }
+    .progress-bar.active { display: block; }
+    .progress-fill {
+      height: 100%; background: linear-gradient(90deg, var(--orange), var(--orange-lt));
+      border-radius: 2px; width: 0%; transition: width 0.4s ease;
+    }
+
+    /* ── Fields ── */
+    .fields { display: flex; flex-direction: column; gap: 7px; margin-bottom: 13px; }
+    .field { display: flex; flex-direction: column; gap: 3px; animation: fadeUp 0.3s ease both; }
+    .field:nth-child(1){animation-delay:0.00s} .field:nth-child(2){animation-delay:0.04s}
+    .field:nth-child(3){animation-delay:0.08s} .field:nth-child(4){animation-delay:0.12s}
+    .field:nth-child(5){animation-delay:0.16s}
+    @keyframes fadeUp { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:translateY(0)} }
+
+    .field label {
+      font-size: 9.5px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.6px;
+      transition: color 0.2s;
+    }
+    .field-value {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 7px; padding: 7px 10px; min-height: 32px;
+      display: flex; align-items: center;
+      font-size: 12.5px; color: var(--text);
+      transition: border-color 0.2s, background 0.2s, color 0.2s;
+      word-break: break-word;
+    }
+    .field-value.empty { color: var(--muted); opacity: 0.5; font-style: italic; }
+    .field-value.loaded { border-color: var(--field-loaded-border); background: var(--field-loaded-bg); }
+    .field-value.price {
+      font-size: 18px; font-weight: 700; color: var(--orange);
+      border-color: var(--price-border); background: var(--price-bg);
+    }
+    .field-value.price.loaded { border-color: var(--orange-lt); }
+
+    .tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    }
+    .tag.local     { background: var(--tag-local-bg); color: var(--tag-local-text); }
+    .tag.non-local { background: var(--tag-non-bg);   color: var(--tag-non-text); }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 8px; margin-bottom: 10px; }
+    button {
+      flex: 1; padding: 10px 14px; border: none; border-radius: 8px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      font-family: inherit;
+    }
+    button:active { transform: scale(0.97); }
+    #scrapeBtn {
+      background: linear-gradient(135deg, var(--orange), var(--orange-lt));
+      color: white; box-shadow: var(--shadow-scrape);
+    }
+    #scrapeBtn:hover:not(:disabled) { box-shadow: 0 4px 14px rgba(255,98,0,0.42); }
+    #scrapeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #copyBtn {
+      background: var(--copy-bg); color: var(--copy-text);
+      box-shadow: var(--shadow-copy); display: none;
+      transition: background 0.2s, color 0.2s, box-shadow 0.15s;
+    }
+    #copyBtn:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
+
+    /* ── Status ── */
+    .status {
+      font-size: 11px; text-align: center; min-height: 15px;
+      color: var(--muted); display: flex; align-items: center;
+      justify-content: center; gap: 5px; transition: color 0.2s;
+    }
+    .status.success { color: var(--green); font-weight: 600; }
+    .status.error   { color: var(--red);   font-weight: 600; }
+
+    /* ── Footer ── */
+    .footer {
+      border-top: 1px solid var(--footer-border);
+      padding: 8px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      transition: border-color 0.2s;
+    }
+    .footer-author { font-size: 9.5px; color: var(--footer-text); letter-spacing: 0.2px; transition: color 0.2s; }
+    .footer-author span { color: var(--footer-text-s); font-weight: 600; }
+    .temu-dot { width: 6px; height: 6px; background: var(--orange); border-radius: 50%; opacity: 0.5; }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block; width: 11px; height: 11px;
+      border: 2px solid rgba(255,98,0,0.25); border-top-color: var(--orange);
+      border-radius: 50%; animation: spin 0.65s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-icon">🛍️</div>
+    <div class="header-text">
+      <h1>Temu Product Scraper</h1>
+      <p>Extract product data → paste in Excel</p>
+    </div>
+    <span class="version-badge">v1.0</span>
+    <div class="toggle-wrap">
+      <span class="toggle-emoji">☀️</span>
+      <button class="theme-toggle" id="themeToggle" title="Toggle dark mode"></button>
+      <span class="toggle-emoji">🌙</span>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="col-hint">📋 Paste order: <strong>Price</strong> · <em>blank</em> · <strong>Brand</strong> · <em>blank</em> · <strong>Seller</strong> · <em>3 blanks</em> · <strong>Warehouse</strong> · <strong>FFO</strong> · <strong>Start Date</strong> · <strong>End Date</strong></div>
+
+    <div class="fields">
+      <div class="field">
+        <label>💰 Temu Price</label>
+        <div class="field-value price empty" id="f-price">—</div>
+      </div>
+      <div class="two-col">
+        <div class="field"><label>🏷️ Brand</label><div class="field-value empty" id="f-brand">—</div></div>
+        <div class="field"><label>🏪 Seller</label><div class="field-value empty" id="f-seller">—</div></div>
+      </div>
+      <div class="two-col">
+        <div class="field"><label>📦 Warehouse</label><div class="field-value empty" id="f-warehouse">—</div></div>
+        <div class="field"><label>🌏 FFO (Origin)</label><div class="field-value empty" id="f-origin">—</div></div>
+      </div>
+      <div class="two-col">
+        <div class="field"><label>📅 Shipping Start</label><div class="field-value empty" id="f-start">—</div></div>
+        <div class="field"><label>📅 Shipping End</label><div class="field-value empty" id="f-end">—</div></div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button id="scrapeBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Scrape Page
+      </button>
+      <button id="copyBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+        Copy for Excel
+      </button>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="footer">
+    <span class="footer-author">by <span>Steve Gates</span></span>
+    <div class="temu-dot"></div>
+    <span class="footer-author">Temu Product Scraper</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

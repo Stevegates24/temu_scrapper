@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "Temu Product Scraper",
+  "short_name": "Temu Scraper",
+  "version": "1.0.0",
+  "description": "Instantly extract price, brand, seller, origin and shipping dates from any Temu product page \u2014 paste directly into Excel with one click.",
+  "author": "Steve Gates",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "clipboardWrite",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Temu Product Scraper",
+    "default_icon": {
+      "16": "premium_icon_16.png",
+      "32": "premium_icon_32.png",
+      "48": "premium_icon_48.png",
+      "128": "premium_icon_128.png"
+    }
+  },
+  "icons": {
+    "16": "premium_icon_16.png",
+    "32": "premium_icon_32.png",
+    "48": "premium_icon_48.png",
+    "128": "premium_icon_128.png"
+  },
+  "host_permissions": [
+    "https://www.temu.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.temu.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "temu-product-scraper@stevegates",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ],
+        "optional": []
+      }
+    }
+  }
+}
