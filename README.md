@@ -30,7 +30,7 @@ or
 5. Click **Load Unpacked**
 6. Select the `temu_scrapper-main` folder
 
-For FireFox: [Link to be uploaded soon]()
+For FireFox: [Click here](https://addons.mozilla.org/en-US/firefox/addon/temu-product-scraper/)
 
 ---
 
