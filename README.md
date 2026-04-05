@@ -18,7 +18,7 @@ Extract product details from Temu in one click and paste directly into Excel.
 
 Open [Temu Scrapper Extension Page](https://stevegates24.github.io/temu_scrapper/)
 
-[Click here to watch](https://app.guidde.com/share/playbooks/681cM1jpMRtc6kFGDUtf3K](https://app.guidde.com/share/playbooks/681cM1jpMRtc6kFGDUtf3K?origin=j9nzieZQaXhFkdeNcSjPAV4pwPz2&mode=videoOnly))
+[Click here to watch](https://app.guidde.com/share/playbooks/681cM1jpMRtc6kFGDUtf3K?origin=j9nzieZQaXhFkdeNcSjPAV4pwPz2&mode=videoOnly)
 
 or
 
