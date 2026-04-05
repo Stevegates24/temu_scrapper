@@ -1,28 +1,23 @@
-// content.js — Temu Product Scraper v9
+// content.js — Temu Product Scraper v10
 
 (function() {
   if (window.__temuScraperLoaded) return;
   window.__temuScraperLoaded = true;
 
-  // ── Pattern: "Apr 11 - 17" style actual dates ──
   const DATE_PATTERN = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z.]*\s+(\d{1,2})\s*[-–]\s*(\d{1,2})\b/i;
   const MONTH_MAP = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
-
-  // ── Pattern: "5-8 business days" or "5 - 8 business days" ──
   const BIZ_DAYS_PATTERN = /(\d+)\s*[-–]\s*(\d+)\s*business\s*days?/i;
-  // ── Pattern: single "7 business days" ──
   const BIZ_SINGLE_PATTERN = /(\d+)\s*business\s*days?/i;
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  // Add N business days to a date (skips Sat/Sun)
   function addBusinessDays(date, days) {
     const d = new Date(date);
     let added = 0;
     while (added < days) {
       d.setDate(d.getDate() + 1);
       const dow = d.getDay();
-      if (dow !== 0 && dow !== 6) added++; // skip Sunday(0) and Saturday(6)
+      if (dow !== 0 && dow !== 6) added++;
     }
     return d;
   }
@@ -30,34 +25,24 @@
   function formatDate(date) {
     const mm = String(date.getMonth() + 1).padStart(2, "0");
     const dd = String(date.getDate()).padStart(2, "0");
-    const yyyy = date.getFullYear();
-    return `${mm}/${dd}/${yyyy}`;
+    return `${mm}/${dd}/${date.getFullYear()}`;
   }
 
-  // Try to parse business-days range from text → return {start, end} or null
   function parseBusinessDays(text) {
     if (!text) return null;
     const today = new Date();
-
     const rangeMatch = text.match(BIZ_DAYS_PATTERN);
     if (rangeMatch) {
-      const startDays = parseInt(rangeMatch[1]);
-      const endDays   = parseInt(rangeMatch[2]);
       return {
-        start: formatDate(addBusinessDays(today, startDays)),
-        end:   formatDate(addBusinessDays(today, endDays))
+        start: formatDate(addBusinessDays(today, parseInt(rangeMatch[1]))),
+        end:   formatDate(addBusinessDays(today, parseInt(rangeMatch[2])))
       };
     }
-
     const singleMatch = text.match(BIZ_SINGLE_PATTERN);
     if (singleMatch) {
-      const days = parseInt(singleMatch[1]);
-      return {
-        start: formatDate(addBusinessDays(today, days)),
-        end:   formatDate(addBusinessDays(today, days))
-      };
+      const d = formatDate(addBusinessDays(today, parseInt(singleMatch[1])));
+      return { start: d, end: d };
     }
-
     return null;
   }
 
@@ -103,74 +88,155 @@
     return { brand, origin };
   }
 
-  // Scan page for BOTH actual date ranges AND business-day ranges
+  // ── WAREHOUSE DETECTION ──────────────────────────────────────
+  // KEY FIX: Only look for "Local warehouse" inside the product
+  // area — NOT in the nav bar (which has "Local Warehouse" as a
+  // category filter on temu.com/de and other locales).
+  // Strategy:
+  //   1. Find the right-side product panel (#rightContent or
+  //      equivalent) and only scan that subtree.
+  //   2. Look for it in the shipping modal if open.
+  //   3. NEVER scan <nav>, <header>, or top-level nav divs.
+  function detectWarehouse() {
+    // Elements we must EXCLUDE (nav bar, header)
+    const excluded = new Set([
+      ...Array.from(document.querySelectorAll("nav, header, [class*='header'], [class*='Header'], [class*='nav'], [class*='Nav'], [class*='topBar'], [class*='TopBar']"))
+    ]);
+
+    function isExcluded(el) {
+      let node = el;
+      while (node && node !== document.body) {
+        if (excluded.has(node)) return true;
+        node = node.parentElement;
+      }
+      return false;
+    }
+
+    // Preferred: search inside known product/shipping containers
+    const productContainers = [
+      document.querySelector('#rightContent'),
+      document.querySelector('[class*="rightContent"]'),
+      document.querySelector('[class*="goodsDetail"]'),
+      document.querySelector('[class*="product-detail"]'),
+      document.querySelector('[class*="ProductDetail"]'),
+      document.querySelector('[class*="shipping"]'),
+      document.querySelector('[class*="Shipping"]'),
+      // shipping modal / dialog
+      document.querySelector('[role="dialog"]'),
+      document.querySelector('[class*="modal"]'),
+      document.querySelector('[class*="Modal"]'),
+    ].filter(Boolean);
+
+    // Search in product containers first
+    for (const container of productContainers) {
+      const spans = container.querySelectorAll("span, div");
+      for (const el of spans) {
+        if (isExcluded(el)) continue;
+        const t = el.innerText?.trim();
+        // Must say "Local warehouse" specifically (not just "Local")
+        // AND be short (not a block of text)
+        if (t && /local\s*warehouse/i.test(t) && t.length < 80) {
+          return "Local";
+        }
+      }
+    }
+
+    // Fallback: scan all spans/divs but skip nav/header
+    for (const el of document.querySelectorAll("span, div")) {
+      if (isExcluded(el)) continue;
+      const t = el.innerText?.trim();
+      if (!t || t.length > 80) continue;
+      // Must contain the FULL phrase "local warehouse"
+      if (/local\s*warehouse/i.test(t)) {
+        return "Local";
+      }
+    }
+
+    return "Non Local";
+  }
+
+  // ── DATE SCANNING ────────────────────────────────────────────
   function scanPageForDate() {
-    // 1. Try actual date format first (e.g. "Apr 11 - 17")
+    // 1. Short spans with only a date range
     for (const el of document.querySelectorAll("span")) {
       const t = el.innerText?.trim();
-      if (t && t.length < 30 && DATE_PATTERN.test(t)) { const r = parseDateRange(t); if (r) return r; }
+      if (t && t.length < 30 && DATE_PATTERN.test(t)) {
+        const r = parseDateRange(t); if (r) return r;
+      }
     }
+    // 2. PjdWJn3s class (shipping modal date container)
     for (const el of document.querySelectorAll('[class*="PjdWJn3s"]')) {
       const r = parseDateRange(el.innerText?.trim()); if (r) return r;
     }
-
-    // 2. Try "Delivery time" blocks — check both date and business-days formats
-    for (const el of document.querySelectorAll("div")) {
+    // 3. "Delivery time" or "Delivery:" blocks
+    for (const el of document.querySelectorAll("div, span")) {
       const t = el.innerText?.trim();
-      if (t && t.startsWith("Delivery time") && t.length < 200) {
-        const inner = t.replace(/Delivery time/i,"").trim().split("\n")[0];
+      if (!t || t.length > 300) continue;
+      if (/delivery\s*(time)?[:\s]/i.test(t)) {
+        // strip label, try both formats
+        const inner = t.replace(/delivery\s*(time)?[:\s]*/i, "").trim().split("\n")[0];
         const r = parseDateRange(inner) || parseBusinessDays(inner);
         if (r) return r;
       }
     }
-
-    // 3. Scan spans/divs for business-days pattern
+    // 4. Any short element with business-days pattern
     for (const el of document.querySelectorAll("span, div")) {
       const t = el.innerText?.trim();
-      if (!t || t.length > 80) continue;
+      if (!t || t.length > 100) continue;
       const r = parseBusinessDays(t);
       if (r) return r;
     }
-
-    // 4. Fallback: any short element with actual date
+    // 5. Broad fallback: any short element with actual date pattern
     for (const el of document.querySelectorAll("span, div")) {
       const t = el.innerText?.trim();
       if (t && t.length < 60) { const r = parseDateRange(t); if (r) return r; }
     }
-
     return null;
   }
 
   async function openShippingModalAndGetDate() {
+    // Try multiple selectors for the shipping trigger
     const triggers = [
       document.querySelector('[aria-label*="Ships from this seller"]'),
       document.querySelector('[aria-label*="ships from"]'),
-      Array.from(document.querySelectorAll('[role="button"], button')).find(el => {
-        const t = el.innerText?.trim() || el.getAttribute("aria-label") || "";
-        return /ships from/i.test(t) && t.length < 100;
+      document.querySelector('[aria-label*="Delivery"]'),
+      // The green truck "Ships from this seller" row
+      Array.from(document.querySelectorAll('[role="button"], button, [tabindex="0"]')).find(el => {
+        const t = (el.innerText?.trim() || "") + (el.getAttribute("aria-label") || "");
+        return (/ships from/i.test(t) || /delivery/i.test(t)) && t.length < 150;
       }),
-      Array.from(document.querySelectorAll("span")).find(el =>
-        /ships from this seller/i.test(el.innerText?.trim()) && el.innerText.length < 60
-      ),
+      Array.from(document.querySelectorAll("span, div")).find(el => {
+        const t = el.innerText?.trim();
+        return t && /ships from this seller/i.test(t) && t.length < 60;
+      }),
     ].filter(Boolean);
 
     for (const trigger of triggers) {
       try {
-        trigger.click(); await sleep(1200);
+        trigger.click();
+        await sleep(1400);
         const result = scanPageForDate();
-        const closeBtn = document.querySelector('[class*="close"], [aria-label*="close"], [aria-label*="Close"]');
+        // Close modal
+        const closeBtn =
+          document.querySelector('[aria-label="Close"]') ||
+          document.querySelector('[aria-label="close"]') ||
+          document.querySelector('[class*="closeBtn"]') ||
+          document.querySelector('[class*="close-btn"]') ||
+          document.querySelector('[class*="modalClose"]');
         if (closeBtn) closeBtn.click();
         else document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-        await sleep(400);
+        await sleep(500);
         if (result) return result;
       } catch(e) {}
     }
     return null;
   }
 
+  // ── MAIN ─────────────────────────────────────────────────────
   async function scrapeTemuData() {
     await sleep(2500);
 
+    // PRICE
     let price = "";
     const priceEl = document.querySelector('#goods_price') ||
                     document.querySelector('[class*="goods_price"]') ||
@@ -180,6 +246,7 @@
       if (match) price = match[0].replace(/,/g, "");
     }
 
+    // SELLER
     let seller = "";
     const storeLink = document.querySelector('[class*="_3A4F96VH"][role="link"]');
     if (storeLink) {
@@ -199,6 +266,7 @@
       }
     }
 
+    // BRAND + ORIGIN
     let { brand, origin } = extractBrandOrigin();
     if (!brand || !origin) {
       await expandProductDetails();
@@ -208,24 +276,16 @@
     }
     if (!brand) brand = "Brand Not Mentioned";
 
-    let warehouse = "Non Local";
-    const localSpan = Array.from(document.querySelectorAll("span")).find(el => {
-      const t = el.innerText?.trim(); return t && /local\s*warehouse/i.test(t) && t.length < 60;
-    });
-    if (localSpan) warehouse = "Local";
-    if (warehouse === "Non Local") {
-      const localDiv = Array.from(document.querySelectorAll("div")).find(el => {
-        const t = el.innerText?.trim(); return t && /local\s*warehouse/i.test(t) && t.length < 80;
-      });
-      if (localDiv) warehouse = "Local";
-    }
+    // WAREHOUSE — uses the fixed detector
+    const warehouse = detectWarehouse();
 
+    // SHIPPING DATES
     let dateResult = scanPageForDate();
     if (!dateResult) dateResult = await openShippingModalAndGetDate();
     const shippingStart = dateResult?.start || "";
     const shippingEnd   = dateResult?.end   || "";
 
-    console.log("🛒 Temu Scraper v9:", { price, brand, seller, origin, warehouse, shippingStart, shippingEnd });
+    console.log("🛒 Temu Scraper v10:", { price, brand, seller, origin, warehouse, shippingStart, shippingEnd });
     return { price, brand, seller, origin, warehouse, shippingStart, shippingEnd };
   }
 
