@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Amazon Product Scraper</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── CSS Variables: Light ── */
+    :root {
+      --bg-page:       #f8f9fc;
+      --bg-card:       #ffffff;
+      --bg-card-hover: #f4f6fb;
+      --border:        #e8eaf0;
+      --border-field:  #f0f2f7;
+      --text-primary:  #1a1a2e;
+      --text-label:    #9399b0;
+      --text-empty:    #c8ccd8;
+      --text-footer:   #b0b5c8;
+      --text-footer-s: #9399b0;
+      --asin-color:    #183678;
+      --price-color:   #c94a00;
+      --brand-color:   #1a6e45;
+      --btn-copy-bg:   #ffffff;
+      --btn-copy-text: #183678;
+      --btn-copy-border:#e0e4f0;
+      --status-idle:   #9399b0;
+      --toggle-bg:     rgba(255,255,255,0.15);
+      --shadow-card:   0 1px 4px rgba(0,0,0,0.06);
+      --shadow-btn:    0 2px 8px rgba(24,54,120,0.18);
+    }
+
+    /* ── CSS Variables: Dark ── */
+    .dark {
+      --bg-page:       #0f1117;
+      --bg-card:       #1a1d27;
+      --bg-card-hover: #1e2130;
+      --border:        #2a2d3e;
+      --border-field:  #222536;
+      --text-primary:  #e8eaf5;
+      --text-label:    #6b6f85;
+      --text-empty:    #3a3d52;
+      --text-footer:   #4a4d62;
+      --text-footer-s: #6b6f85;
+      --asin-color:    #7ca4f4;
+      --price-color:   #ff8c50;
+      --brand-color:   #4ade80;
+      --btn-copy-bg:   #1e2130;
+      --btn-copy-text: #7ca4f4;
+      --btn-copy-border:#2a2d3e;
+      --status-idle:   #6b6f85;
+      --toggle-bg:     rgba(255,255,255,0.08);
+      --shadow-card:   0 1px 6px rgba(0,0,0,0.4);
+      --shadow-btn:    0 2px 10px rgba(0,0,0,0.4);
+    }
+
+    body {
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      width: 320px;
+      background: var(--bg-page);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #183678 0%, #1a3a8f 60%, #1e4db7 100%);
+      padding: 14px 16px 13px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      position: relative;
+      overflow: hidden;
+    }
+    .header::after {
+      content: '';
+      position: absolute;
+      right: -24px; top: -24px;
+      width: 90px; height: 90px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      pointer-events: none;
+    }
+    .header-logo {
+      width: 34px; height: 34px;
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+    .header-text { flex: 1; }
+    .header-text h1 {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.2px;
+    }
+    .header-text p {
+      font-size: 10.5px;
+      color: rgba(255,255,255,0.55);
+      margin-top: 2px;
+    }
+
+    /* ── Dark mode toggle ── */
+    .theme-toggle {
+      background: var(--toggle-bg);
+      border: none;
+      border-radius: 20px;
+      width: 34px; height: 20px;
+      cursor: pointer;
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.2s;
+      padding: 0;
+    }
+    .theme-toggle::after {
+      content: '';
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.9);
+      transition: transform 0.22s cubic-bezier(.4,0,.2,1);
+    }
+    .dark .theme-toggle::after { transform: translateX(14px); }
+    .toggle-icon {
+      position: absolute;
+      font-size: 9px;
+      top: 50%; transform: translateY(-50%);
+      pointer-events: none;
+    }
+    .toggle-icon.sun  { left: 4px; }
+    .toggle-icon.moon { right: 3px; }
+
+    /* ── Body ── */
+    .body { padding: 14px 14px 10px; }
+
+    /* ── Fields card ── */
+    .fields {
+      background: var(--bg-card);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow-card);
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .field {
+      display: flex;
+      align-items: center;
+      padding: 10px 13px;
+      gap: 11px;
+      border-bottom: 1px solid var(--border-field);
+      transition: border-color 0.2s;
+    }
+    .field:last-child { border-bottom: none; }
+
+    .field-icon {
+      width: 28px; height: 28px;
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: 13px;
+      transition: background 0.2s;
+    }
+    .field-icon.asin-ic  { background: #eef2ff; }
+    .field-icon.price-ic { background: #fff5e6; }
+    .field-icon.brand-ic { background: #edfaf3; }
+    .dark .field-icon.asin-ic  { background: #1c2340; }
+    .dark .field-icon.price-ic { background: #2a1a0e; }
+    .dark .field-icon.brand-ic { background: #0e2a1a; }
+
+    .field-body { flex: 1; min-width: 0; }
+    .field-body label {
+      font-size: 9.5px;
+      font-weight: 600;
+      color: var(--text-label);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      display: block;
+      margin-bottom: 2px;
+      transition: color 0.2s;
+    }
+    .field-value {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: color 0.2s;
+    }
+    .field-value.empty { color: var(--text-empty); font-weight: 400; font-style: italic; }
+    .field-value.asin-val  { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 700; color: var(--asin-color); letter-spacing: 0.5px; }
+    .field-value.price-val { font-size: 15px; font-weight: 700; color: var(--price-color); }
+    .field-value.brand-val { color: var(--brand-color); font-weight: 600; }
+
+    /* ── Scrape button ── */
+    .scrape-btn {
+      width: 100%;
+      padding: 11px;
+      background: linear-gradient(135deg, #183678, #1e4db7);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.1px;
+      transition: opacity 0.15s, transform 0.1s, box-shadow 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      box-shadow: var(--shadow-btn);
+    }
+    .scrape-btn:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
+    .scrape-btn:active { transform: translateY(0); }
+    .scrape-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* ── Copy buttons ── */
+    .copy-row { display: none; gap: 8px; margin-top: 8px; }
+    .copy-btn {
+      flex: 1;
+      padding: 9px 8px;
+      border: 1.5px solid var(--btn-copy-border);
+      border-radius: 9px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--btn-copy-bg);
+      color: var(--btn-copy-text);
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+    .copy-btn:hover { background: #183678; color: white; border-color: #183678; }
+    .copy-btn.flashed { background: #1a6e45; color: white; border-color: #1a6e45; }
+    .dark .copy-btn:hover { background: #2a3f80; border-color: #2a3f80; color: white; }
+    .dark .copy-btn.flashed { background: #166534; border-color: #166534; }
+
+    /* ── Status ── */
+    .status {
+      margin-top: 9px;
+      font-size: 11px;
+      text-align: center;
+      min-height: 16px;
+      color: var(--status-idle);
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    .status.success { color: #1a6e45; }
+    .status.error   { color: #c0392b; }
+    .dark .status.success { color: #4ade80; }
+    .dark .status.error   { color: #f87171; }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 9px 14px 11px;
+      text-align: center;
+      font-size: 10px;
+      color: var(--text-footer);
+      border-top: 1px solid var(--border);
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .footer span { color: var(--text-footer-s); font-weight: 500; }
+
+    /* ── Spinner ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 13px; height: 13px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    .loading .spinner { display: block; }
+    .loading .btn-icon { display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <img src="icons/icon48.png" class="header-logo" alt="logo">
+    <div class="header-text">
+      <h1>Amazon Product Scraper</h1>
+      <p>Extract ASIN · Price · Brand → Excel</p>
+    </div>
+    <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">
+      <span class="toggle-icon sun">☀️</span>
+      <span class="toggle-icon moon">🌙</span>
+    </button>
+  </div>
+
+  <div class="body">
+    <div class="fields">
+      <div class="field">
+        <div class="field-icon asin-ic">🔑</div>
+        <div class="field-body">
+          <label>ASIN</label>
+          <div class="field-value asin-val empty" id="f-asin">Not scraped</div>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-icon price-ic">💰</div>
+        <div class="field-body">
+          <label>Price</label>
+          <div class="field-value price-val empty" id="f-price">Not scraped</div>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-icon brand-ic">🏷️</div>
+        <div class="field-body">
+          <label>Brand</label>
+          <div class="field-value brand-val empty" id="f-brand">Not scraped</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="scrape-btn" id="scrapeBtn">
+      <span class="btn-icon">🔍</span>
+      <div class="spinner"></div>
+      <span id="btnLabel">Scrape Page</span>
+    </button>
+
+    <div class="copy-row" id="copyBtns">
+      <button class="copy-btn" id="copyAsinPrice">📋 ASIN + Price</button>
+      <button class="copy-btn" id="copyBrand">🏷️ Brand</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="footer">
+    By <span>Steve Gates</span> &nbsp;·&nbsp; v1.0.0
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
