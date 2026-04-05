@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Temu Product Scraper — by Steve Gates</title>
+  <meta name="description" content="A browser extension that extracts price, brand, seller, origin and shipping dates from any Temu product page instantly." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --orange:    #FF6200;
+      --orange-lt: #FF8C3A;
+      --orange-dim:#7A2E00;
+      --bg:        #0C0C0C;
+      --bg2:       #111111;
+      --bg3:       #161616;
+      --border:    rgba(255,255,255,0.07);
+      --text:      #E8E8E8;
+      --muted:     #666;
+      --subtle:    #333;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+
+    /* ── NOISE TEXTURE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+      opacity: 0.022;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 900;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 40px;
+      background: rgba(12,12,12,0.85);
+      backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .nav-logo-icon {
+      width: 32px; height: 32px;
+      background: var(--orange);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    /* T lettermark in logo */
+    .nav-logo-icon::before {
+      content: '';
+      position: absolute;
+      width: 3px; height: 18px;
+      background: white;
+      border-radius: 2px;
+      top: 7px;
+    }
+    .nav-logo-icon::after {
+      content: '';
+      position: absolute;
+      width: 14px; height: 3px;
+      background: white;
+      border-radius: 2px;
+      top: 10px;
+    }
+
+    .nav-logo-text {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 500;
+      letter-spacing: 0.2px;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-cta {
+      background: var(--orange);
+      color: white !important;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-weight: 600 !important;
+      font-size: 13px !important;
+      transition: opacity 0.2s, transform 0.15s !important;
+    }
+    .nav-cta:hover { opacity: 0.88; transform: translateY(-1px); }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Big radial glow behind hero */
+    .hero::before {
+      content: '';
+      position: absolute;
+      width: 700px; height: 700px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,98,0,0.12) 0%, transparent 70%);
+      top: 50%; left: 50%;
+      transform: translate(-50%, -55%);
+      pointer-events: none;
+    }
+
+    /* Grid lines */
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black 30%, transparent 100%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(255,98,0,0.1);
+      border: 1px solid rgba(255,98,0,0.25);
+      color: var(--orange-lt);
+      font-size: 12px;
+      font-weight: 500;
+      font-family: 'DM Mono', monospace;
+      padding: 6px 14px;
+      border-radius: 100px;
+      margin-bottom: 32px;
+      animation: fadeUp 0.6s ease both;
+      letter-spacing: 0.3px;
+    }
+    .hero-badge-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--orange);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .hero-title {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(48px, 8vw, 96px);
+      font-weight: 800;
+      line-height: 1.0;
+      letter-spacing: -3px;
+      margin-bottom: 12px;
+      animation: fadeUp 0.7s 0.1s ease both;
+    }
+
+    .hero-title-line2 {
+      background: linear-gradient(90deg, var(--orange), var(--orange-lt), #FFB86C, var(--orange));
+      background-size: 300% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: fadeUp 0.7s 0.1s ease both, shimmer 4s linear infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: 0% 50%; }
+      100% { background-position: 300% 50%; }
+    }
+
+    .hero-sub {
+      font-size: 18px;
+      color: var(--muted);
+      max-width: 520px;
+      font-weight: 300;
+      line-height: 1.6;
+      margin: 24px auto 44px;
+      animation: fadeUp 0.7s 0.2s ease both;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      animation: fadeUp 0.7s 0.3s ease both;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--orange);
+      color: white;
+      text-decoration: none;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 600;
+      font-size: 15px;
+      padding: 14px 28px;
+      border-radius: 10px;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 0 0 0 rgba(255,98,0,0);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(255,98,0,0.35);
+    }
+
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      color: var(--text);
+      text-decoration: none;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      font-size: 15px;
+      padding: 13px 28px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .btn-ghost:hover {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── POPUP MOCKUP ── */
+    .mockup-wrap {
+      margin-top: 80px;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      animation: fadeUp 0.8s 0.5s ease both;
+    }
+
+    .mockup-glow {
+      position: absolute;
+      width: 400px; height: 200px;
+      background: radial-gradient(ellipse, rgba(255,98,0,0.18) 0%, transparent 70%);
+      bottom: -40px;
+      left: 50%; transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    .popup-mockup {
+      width: 320px;
+      background: #1A1A1A;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.10);
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(255,98,0,0.08),
+        0 40px 80px rgba(0,0,0,0.6),
+        0 8px 20px rgba(0,0,0,0.4);
+      position: relative;
+    }
+
+    .pm-header {
+      background: linear-gradient(135deg, #FF6200, #FF8C3A);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .pm-icon {
+      width: 32px; height: 32px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .pm-title { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; color: white; }
+    .pm-sub   { font-size: 10px; color: rgba(255,255,255,0.7); }
+    .pm-badge {
+      margin-left: auto;
+      background: rgba(255,255,255,0.18);
+      color: rgba(255,255,255,0.9);
+      font-size: 9px; font-weight: 600;
+      padding: 3px 8px; border-radius: 20px;
+      font-family: 'DM Mono', monospace;
+    }
+
+    .pm-body { padding: 14px; }
+
+    .pm-hint {
+      background: rgba(255,98,0,0.08);
+      border: 1px solid rgba(255,98,0,0.18);
+      border-radius: 7px;
+      padding: 7px 10px;
+      font-size: 9.5px;
+      color: rgba(255,140,58,0.9);
+      margin-bottom: 12px;
+      line-height: 1.5;
+      font-family: 'DM Mono', monospace;
+    }
+
+    .pm-field { margin-bottom: 8px; }
+    .pm-label {
+      font-size: 8.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #555;
+      margin-bottom: 3px;
+    }
+    .pm-value {
+      background: #111;
+      border: 1px solid #2A2A2A;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 12px;
+      color: #E0E0E0;
+    }
+    .pm-value.price {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--orange-lt);
+      font-family: 'Syne', sans-serif;
+      border-color: rgba(255,98,0,0.25);
+      background: rgba(255,98,0,0.05);
+    }
+    .pm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 8px; }
+
+    .pm-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(74,224,122,0.1);
+      color: #4AE07A;
+      border-radius: 20px;
+      padding: 2px 8px;
+      font-size: 10px; font-weight: 600;
+    }
+
+    .pm-btns { display: flex; gap: 7px; margin-top: 12px; }
+    .pm-btn  {
+      flex: 1; padding: 9px;
+      border-radius: 7px;
+      font-size: 11px; font-weight: 600;
+      text-align: center;
+    }
+    .pm-btn-or { background: linear-gradient(135deg, #FF6200, #FF8C3A); color: white; }
+    .pm-btn-dk { background: #F0F0F0; color: #111; }
+
+    /* ── STATS STRIP ── */
+    .stats {
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 40px 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .stat {
+      text-align: center;
+      padding: 20px;
+      border-right: 1px solid var(--border);
+    }
+    .stat:last-child { border-right: none; }
+
+    .stat-num {
+      font-family: 'Syne', sans-serif;
+      font-size: 40px;
+      font-weight: 800;
+      color: var(--orange);
+      line-height: 1;
+      letter-spacing: -2px;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 6px;
+      font-weight: 400;
+    }
+
+    /* ── SECTION LAYOUT ── */
+    section {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 100px 24px;
+    }
+
+    .section-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--orange);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 16px;
+    }
+    .section-tag::before {
+      content: '';
+      width: 20px; height: 1px;
+      background: var(--orange);
+    }
+
+    .section-title {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 800;
+      letter-spacing: -2px;
+      line-height: 1.05;
+      margin-bottom: 20px;
+      color: var(--text);
+    }
+
+    .section-body {
+      font-size: 17px;
+      color: var(--muted);
+      max-width: 560px;
+      line-height: 1.75;
+      font-weight: 300;
+    }
+
+    /* ── FEATURES ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-top: 60px;
+    }
+
+    .feature-card {
+      background: var(--bg2);
+      padding: 36px 32px;
+      transition: background 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--orange), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feature-card:hover { background: var(--bg3); }
+    .feature-card:hover::before { opacity: 1; }
+
+    .feature-icon {
+      width: 44px; height: 44px;
+      background: rgba(255,98,0,0.1);
+      border: 1px solid rgba(255,98,0,0.2);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
+
+    .feature-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: var(--text);
+      letter-spacing: -0.5px;
+    }
+    .feature-desc { font-size: 14px; color: var(--muted); line-height: 1.7; }
+
+    /* ── HOW IT WORKS ── */
+    .steps {
+      margin-top: 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      position: relative;
+    }
+    .steps::before {
+      content: '';
+      position: absolute;
+      left: 22px;
+      top: 44px;
+      bottom: 44px;
+      width: 1px;
+      background: linear-gradient(to bottom, var(--orange), transparent);
+    }
+
+    .step {
+      display: flex;
+      gap: 28px;
+      padding: 28px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+      opacity: 0;
+      transform: translateX(-20px);
+      transition: opacity 0.5s, transform 0.5s;
+    }
+    .step.visible { opacity: 1; transform: translateX(0); }
+    .step:last-child { border-bottom: none; }
+
+    .step-num {
+      width: 44px; height: 44px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 16px;
+      color: var(--orange);
+      flex-shrink: 0;
+      z-index: 1;
+    }
+
+    .step-content {}
+    .step-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+    .step-desc { font-size: 15px; color: var(--muted); line-height: 1.65; }
+
+    .step-code {
+      margin-top: 10px;
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 10px 14px;
+      color: var(--orange-lt);
+      display: inline-block;
+    }
+
+    /* ── DATA FIELDS SECTION ── */
+    .fields-showcase {
+      margin-top: 60px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .field-pill {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .field-pill:hover {
+      border-color: rgba(255,98,0,0.3);
+      background: var(--bg3);
+    }
+
+    .field-emoji { font-size: 24px; }
+    .field-info {}
+    .field-name {
+      font-family: 'Syne', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+    .field-example {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .field-example span { color: var(--orange-lt); }
+
+    /* ── INSTALL SECTION ── */
+    .install-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 48px;
+    }
+
+    @media (max-width: 640px) {
+      .install-grid { grid-template-columns: 1fr; }
+    }
+
+    .install-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px 26px;
+      text-decoration: none;
+      transition: border-color 0.2s, background 0.2s, transform 0.2s;
+      display: block;
+    }
+    .install-card:hover {
+      border-color: rgba(255,98,0,0.4);
+      background: var(--bg3);
+      transform: translateY(-3px);
+    }
+
+    .install-browser {
+      font-size: 32px;
+      margin-bottom: 14px;
+    }
+    .install-name {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .install-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .install-arrow {
+      margin-top: 18px;
+      color: var(--orange);
+      font-size: 20px;
+      transition: transform 0.2s;
+    }
+    .install-card:hover .install-arrow { transform: translateX(4px); }
+
+    /* ── EXCEL COLUMNS ── */
+    .columns-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 48px;
+      font-size: 13.5px;
+    }
+    .columns-table th {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      text-align: left;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 400;
+    }
+    .columns-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+      vertical-align: middle;
+    }
+    .columns-table tr:last-child td { border-bottom: none; }
+    .columns-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .col-num {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      width: 40px;
+    }
+    .col-badge-auto {
+      display: inline-block;
+      background: rgba(255,98,0,0.1);
+      border: 1px solid rgba(255,98,0,0.2);
+      color: var(--orange-lt);
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+    .col-badge-manual {
+      display: inline-block;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 48px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .footer-logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--text);
+    }
+    .footer-logo span { color: var(--orange); }
+
+    .footer-meta {
+      font-size: 13px;
+      color: var(--muted);
+      text-align: right;
+    }
+    .footer-meta a {
+      color: var(--orange-lt);
+      text-decoration: none;
+    }
+    .footer-meta a:hover { text-decoration: underline; }
+
+    /* ── SCROLL REVEAL ── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.65s ease, transform 0.65s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      nav { padding: 14px 20px; }
+      .nav-links { display: none; }
+      .hero { padding: 100px 20px 60px; }
+      section { padding: 70px 20px; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .stat { border-right: none; border-bottom: 1px solid var(--border); }
+      .stat:last-child { border-bottom: none; }
+      footer { padding: 32px 20px; flex-direction: column; align-items: flex-start; }
+      .footer-meta { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a href="#" class="nav-logo">
+      <div class="nav-logo-icon"></div>
+      <span class="nav-logo-text">Temu Scraper</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#data">Data fields</a></li>
+      <li><a href="#install">Install</a></li>
+      <li><a href="https://github.com" class="nav-cta">↓ Download</a></li>
+    </ul>
+  </nav>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-badge">
+      <div class="hero-badge-dot"></div>
+      v1.0.0 — Chrome &amp; Firefox ready
+    </div>
+
+    <h1 class="hero-title">
+      Temu data.<br>
+      <span class="hero-title-line2">Instantly.</span>
+    </h1>
+
+    <p class="hero-sub">
+      One click extracts price, brand, seller, origin and shipping dates from any Temu product page — paste straight into Excel.
+    </p>
+
+    <div class="hero-buttons">
+      <a href="#install" class="btn-primary">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Install Extension
+      </a>
+      <a href="https://github.com" class="btn-ghost">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+
+    <!-- POPUP MOCKUP -->
+    <div class="mockup-wrap">
+      <div class="mockup-glow"></div>
+      <div class="popup-mockup">
+        <div class="pm-header">
+          <div class="pm-icon">🛍️</div>
+          <div>
+            <div class="pm-title">Temu Product Scraper</div>
+            <div class="pm-sub">Extract product data → paste in Excel</div>
+          </div>
+          <span class="pm-badge">v1.0</span>
+        </div>
+        <div class="pm-body">
+          <div class="pm-hint">📋 Price · blank · Brand · blank · Seller · 3 blanks · Warehouse · FFO · Start · End</div>
+          <div class="pm-field">
+            <div class="pm-label">💰 Temu Price</div>
+            <div class="pm-value price">2.75</div>
+          </div>
+          <div class="pm-row">
+            <div class="pm-field">
+              <div class="pm-label">🏷️ Brand</div>
+              <div class="pm-value">BHGOCA</div>
+            </div>
+            <div class="pm-field">
+              <div class="pm-label">🏪 Seller</div>
+              <div class="pm-value">Sport Band</div>
+            </div>
+          </div>
+          <div class="pm-row">
+            <div class="pm-field">
+              <div class="pm-label">📦 Warehouse</div>
+              <div class="pm-value"><span class="pm-tag">🏠 Local</span></div>
+            </div>
+            <div class="pm-field">
+              <div class="pm-label">🌏 FFO</div>
+              <div class="pm-value">Guangdong,CN</div>
+            </div>
+          </div>
+          <div class="pm-btns">
+            <div class="pm-btn pm-btn-or">🔍 Scrape Page</div>
+            <div class="pm-btn pm-btn-dk">📋 Copy for Excel</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-num">7</div>
+      <div class="stat-label">Data fields extracted</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">1</div>
+      <div class="stat-label">Click to scrape</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">0</div>
+      <div class="stat-label">Manual copy-paste</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">2</div>
+      <div class="stat-label">Browsers supported</div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="reveal">
+      <div class="section-tag">Features</div>
+      <h2 class="section-title">Everything you need,<br>nothing you don't.</h2>
+      <p class="section-body">Built for people who list Temu products on Amazon. No bloat, no accounts, no subscriptions — just open a product page and click.</p>
+    </div>
+
+    <div class="features-grid reveal">
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <div class="feature-title">One-click scrape</div>
+        <div class="feature-desc">Hit Scrape Page and all fields populate instantly. The extension auto-clicks "See all details" and the shipping modal behind the scenes.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📋</div>
+        <div class="feature-title">Excel-ready output</div>
+        <div class="feature-desc">Tab-separated clipboard data — Ctrl+V fills your spreadsheet columns in exactly the right order, with blanks preserved for columns you fill manually.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🏠</div>
+        <div class="feature-title">Local vs Non-Local</div>
+        <div class="feature-desc">Auto-detects "Local warehouse" from page spans and tags the Warehouse column accordingly. Defaults to Non Local for standard products.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📅</div>
+        <div class="feature-title">Shipping dates parsed</div>
+        <div class="feature-desc">Converts "Apr. 11–17" into MM/dd/yyyy start and end dates automatically, so your spreadsheet stays consistent.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🌙</div>
+        <div class="feature-title">Dark mode built-in</div>
+        <div class="feature-desc">Toggle between light and dark with one click. Your preference is saved so it persists across every session.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🛡️</div>
+        <div class="feature-title">Zero data collected</div>
+        <div class="feature-desc">Everything runs locally in your browser. No servers, no tracking, no analytics. Your product research stays yours.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section id="how" style="background: var(--bg2); max-width: 100%; padding: 100px 0;">
+    <div style="max-width: 700px; margin: 0 auto; padding: 0 24px;">
+      <div class="reveal">
+        <div class="section-tag">How it works</div>
+        <h2 class="section-title">Three steps.<br>Done.</h2>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-title">Install the extension</div>
+            <div class="step-desc">Download the zip, unzip it, go to your browser extensions page and load unpacked. Takes under 60 seconds.</div>
+            <div class="step-code">chrome://extensions → Load unpacked</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-title">Open any Temu product page</div>
+            <div class="step-desc">Navigate to a product on temu.com and wait for the page to fully load. Then click the extension icon in your toolbar.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-title">Scrape → Copy → Paste</div>
+            <div class="step-desc">Hit Scrape Page, review the extracted data, then Copy for Excel. Click the first cell in your spreadsheet and Ctrl+V.</div>
+            <div class="step-code">Ctrl+V → fills all 12 columns</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA FIELDS -->
+  <section id="data">
+    <div class="reveal">
+      <div class="section-tag">Data Fields</div>
+      <h2 class="section-title">What gets extracted.</h2>
+      <p class="section-body">Seven fields scraped automatically. Five columns left blank for you to fill — exactly matching your spreadsheet layout.</p>
+    </div>
+
+    <div class="fields-showcase reveal">
+      <div class="field-pill">
+        <div class="field-emoji">💰</div>
+        <div class="field-info">
+          <div class="field-name">Price</div>
+          <div class="field-example">→ <span>2.75</span></div>
+        </div>
+      </div>
+      <div class="field-pill">
+        <div class="field-emoji">🏷️</div>
+        <div class="field-info">
+          <div class="field-name">Brand</div>
+          <div class="field-example">→ <span>BHGOCA</span> or Brand Not Mentioned</div>
+        </div>
+      </div>
+      <div class="field-pill">
+        <div class="field-emoji">🏪</div>
+        <div class="field-info">
+          <div class="field-name">Seller</div>
+          <div class="field-example">→ <span>Sport Band</span></div>
+        </div>
+      </div>
+      <div class="field-pill">
+        <div class="field-emoji">📦</div>
+        <div class="field-info">
+          <div class="field-name">Warehouse</div>
+          <div class="field-example">→ <span>Local</span> / Non Local</div>
+        </div>
+      </div>
+      <div class="field-pill">
+        <div class="field-emoji">🌏</div>
+        <div class="field-info">
+          <div class="field-name">FFO (Origin)</div>
+          <div class="field-example">→ <span>Guangdong,China</span></div>
+        </div>
+      </div>
+      <div class="field-pill">
+        <div class="field-emoji">📅</div>
+        <div class="field-info">
+          <div class="field-name">Shipping Start</div>
+          <div class="field-example">→ <span>04/11/2026</span></div>
+        </div>
+      </div>
+      <div class="field-pill">
+        <div class="field-emoji">📅</div>
+        <div class="field-info">
+          <div class="field-name">Shipping End</div>
+          <div class="field-example">→ <span>04/17/2026</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Excel column map -->
+    <div class="reveal" style="margin-top: 60px;">
+      <div class="section-tag">Excel Column Map</div>
+      <table class="columns-table">
+        <thead>
+          <tr>
+            <th>Col</th>
+            <th>Header</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="col-num">A</td><td>Temu Price</td><td><span class="col-badge-auto">auto</span></td></tr>
+          <tr><td class="col-num">B</td><td>Inexact Reason Code</td><td><span class="col-badge-manual">you fill</span></td></tr>
+          <tr><td class="col-num">C</td><td>Temu Brand</td><td><span class="col-badge-auto">auto</span></td></tr>
+          <tr><td class="col-num">D</td><td>Amazon Brand</td><td><span class="col-badge-manual">you fill</span></td></tr>
+          <tr><td class="col-num">E</td><td>Temu Seller Name</td><td><span class="col-badge-auto">auto</span></td></tr>
+          <tr><td class="col-num">F</td><td>Amazon Lens Search</td><td><span class="col-badge-manual">you fill</span></td></tr>
+          <tr><td class="col-num">G</td><td>Title / Custom Title Search</td><td><span class="col-badge-manual">you fill</span></td></tr>
+          <tr><td class="col-num">H</td><td>INF ASIN</td><td><span class="col-badge-manual">you fill</span></td></tr>
+          <tr><td class="col-num">I</td><td>Warehouse Details</td><td><span class="col-badge-auto">auto</span></td></tr>
+          <tr><td class="col-num">J</td><td>FFO (Origin)</td><td><span class="col-badge-auto">auto</span></td></tr>
+          <tr><td class="col-num">K</td><td>Shipping Start Date</td><td><span class="col-badge-auto">auto</span></td></tr>
+          <tr><td class="col-num">L</td><td>Shipping End Date</td><td><span class="col-badge-auto">auto</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- INSTALL -->
+  <section id="install" style="background: var(--bg2); max-width: 100%; padding: 100px 0;">
+    <div style="max-width: 800px; margin: 0 auto; padding: 0 24px;">
+      <div class="reveal">
+        <div class="section-tag">Install</div>
+        <h2 class="section-title">Get it on your browser.</h2>
+        <p class="section-body">Available for Chrome and Firefox. Both use the same extension package.</p>
+      </div>
+
+      <div class="install-grid reveal">
+        <a href="https://github.com" class="install-card">
+          <div class="install-browser">🌐</div>
+          <div class="install-name">Google Chrome</div>
+          <div class="install-desc">Load unpacked via chrome://extensions or install from the Chrome Web Store once published.</div>
+          <div class="install-arrow">→</div>
+        </a>
+        <a href="https://addons.mozilla.org" class="install-card">
+          <div class="install-browser">🦊</div>
+          <div class="install-name">Firefox</div>
+          <div class="install-desc">Submit to Firefox Add-ons (addons.mozilla.org). Same zip, fully Manifest V3 compatible.</div>
+          <div class="install-arrow">→</div>
+        </a>
+      </div>
+
+      <div class="reveal" style="margin-top: 32px; padding: 28px; background: var(--bg3); border: 1px solid var(--border); border-radius: 14px;">
+        <div style="font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; margin-bottom: 10px;">Manual install (developer mode)</div>
+        <div style="font-size: 14px; color: var(--muted); line-height: 1.8;">
+          1. Download the <code style="font-family: 'DM Mono', monospace; color: var(--orange-lt); background: rgba(255,98,0,0.08); padding: 2px 6px; border-radius: 4px;">.zip</code> file from GitHub<br>
+          2. Unzip into a folder<br>
+          3. Go to <code style="font-family: 'DM Mono', monospace; color: var(--orange-lt); background: rgba(255,98,0,0.08); padding: 2px 6px; border-radius: 4px;">chrome://extensions</code><br>
+          4. Enable <strong style="color: var(--text);">Developer Mode</strong> (top right)<br>
+          5. Click <strong style="color: var(--text);">Load unpacked</strong> → select the folder<br>
+          6. Open any Temu product page and click the extension icon 🛍️
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div>
+      <div class="footer-logo">Temu <span>Scraper</span></div>
+      <div style="font-size: 12px; color: var(--muted); margin-top: 6px;">Built by Steve Gates · v1.0.0</div>
+    </div>
+    <div class="footer-meta">
+      <a href="https://github.com">GitHub →</a><br>
+      <span style="font-size: 12px;">Not affiliated with Temu or Whaleco Inc.</span>
+    </div>
+  </footer>
+
+  <script>
+    // Scroll reveal
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          observer.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.12 });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // Steps reveal with stagger
+    const stepObs = new IntersectionObserver((entries) => {
+      entries.forEach((e, i) => {
+        if (e.isIntersecting) {
+          setTimeout(() => e.target.classList.add('visible'), i * 120);
+          stepObs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.step').forEach(el => stepObs.observe(el));
+  </script>
+</body>
+</html>
