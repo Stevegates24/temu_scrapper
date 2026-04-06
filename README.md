@@ -32,6 +32,8 @@ or
 
 For FireFox: [Click here](https://addons.mozilla.org/en-US/firefox/addon/temu-product-scraper/)
 
+For FireFox(Dev mode): [Download Extension File](https://github.com/Stevegates24/temu_scrapper/raw/Firefox-(Dev-install)/Temu%20Scraper%20v1.1%20(2).zip)
+
 ---
 
 ## ⚡ Usage
