@@ -1,4 +1,4 @@
-// content.js — Temu Product Scraper v16.1
+// content.js — Temu Product Scraper v16
 
 (function() {
   if (window.__temuScraperInjected) return;
@@ -537,104 +537,74 @@
     await sleep(2500);
 
     // PRICE
-    // Strategy: find the sale price, explicitly skipping struck-through elements.
-    // DevTools shows the actual price is in span._14At0Pe5 inside the _1vkz0rqG
-    // price container, while the MRP/original has style="...line-through..."
+    // Simple rule: find all price-looking spans, skip any that have line-through
+    // on themselves OR any ancestor. Take the first valid one.
     let price = "";
 
-    function isStrikethrough(el) {
-      const style = el.getAttribute("style") || "";
-      if (/line-through/i.test(style)) return true;
-      try {
-        const computed = window.getComputedStyle(el);
-        if (/line-through/i.test(computed.textDecorationLine || "")) return true;
-        if (/line-through/i.test(computed.textDecoration || "")) return true;
-      } catch(e) {}
+    function hasLineThrough(el) {
+      let node = el;
+      while (node && node !== document.body) {
+        const style = node.getAttribute && (node.getAttribute("style") || "");
+        if (/text-decoration[^;]*line-through/i.test(style)) return true;
+        try {
+          const cs = window.getComputedStyle(node);
+          const td = (cs.textDecorationLine || cs.textDecoration || "");
+          if (/line-through/i.test(td)) return true;
+        } catch(e) {}
+        node = node.parentElement;
+      }
       return false;
     }
 
-    // A valid price must look like: 3.71 or 26.54 or 1,234.56
-    // NOT: 4.0 (star rating), 4 (bare integer), 87 (discount %)
-    function isValidPrice(str) {
+    function looksLikePrice(str) {
+      // Must have digits with a decimal point and 2 decimal places: 3.71, 26.54, 0.85
+      // Reject: 4.0 (rating), 9 (bare int), 87 (%), 0.92 (pay-today single digit before dot)
       if (!str) return false;
-      const n = parseFloat(str.replace(/,/g, ""));
-      if (isNaN(n) || n <= 0) return false;
-      // Must have cents (decimal with 2 digits) OR be >= 10 (avoids star ratings like 4.0, 4.7)
-      // Prices like 0.85, 1.48, 3.42, 3.71, 26.54 all pass
-      // Star ratings 4.0, 4.7 fail because they are single digit before decimal
-      if (/^\d{1,2}\.\d{2,}$/.test(str)) return true;  // e.g. 3.71, 26.54
-      if (/^\d{3,}(\.\d+)?$/.test(str.replace(/,/g,""))) return true; // e.g. 1234 or 1234.56
-      if (/^\d+,\d{3}/.test(str)) return true; // comma-thousands format
-      return false;
+      const clean = str.replace(/[$€£¥₹,]/g, "").trim();
+      // Require pattern: one or more digits, dot, exactly 2 digits (cents)
+      if (!/^\d+\.\d{2}$/.test(clean)) return false;
+      const n = parseFloat(clean);
+      return n > 0 && n < 10000;
     }
 
-    function extractCleanPrice(el) {
-      // Walk all spans inside the container, skip struck-through and aria-hidden ones
-      const spans = Array.from(el.querySelectorAll("span"));
+    // Scan the goods_price container for leaf spans with valid prices, skip line-through
+    const goodsPriceEl =
+      document.querySelector('#goods_price') ||
+      document.querySelector('[class*="goods_price"]') ||
+      document.querySelector('[class*="GoodsPrice"]');
+
+    if (goodsPriceEl) {
+      const spans = goodsPriceEl.querySelectorAll("span");
       for (const span of spans) {
-        if (isStrikethrough(span)) continue;
+        if (hasLineThrough(span)) continue;
         if (span.getAttribute("aria-hidden") === "true") continue;
-        // Skip spans that contain child spans (they are wrappers, not leaf price values)
+        // Skip wrapper spans that contain other spans
         if (span.querySelector("span")) continue;
-        const t = span.innerText?.trim().replace(/^[$€£¥₹]/,"");
-        if (!t) continue;
-        if (isValidPrice(t)) return t.replace(/,/g, "");
-      }
-      return null;
-    }
-
-    // Strategy 1: Known sale price span (_14At0Pe5 from DevTools) — most reliable
-    const salePriceSpan = document.querySelector('[class*="_14At0Pe5"]');
-    if (salePriceSpan && !isStrikethrough(salePriceSpan)) {
-      const t = salePriceSpan.innerText?.trim().replace(/^[$€£¥₹]/,"");
-      if (t && isValidPrice(t)) price = t.replace(/,/g, "");
-    }
-
-    // Strategy 2: goods_price container — scan leaf spans, skip strikethrough
-    if (!price) {
-      const priceEl =
-        document.querySelector('#goods_price') ||
-        document.querySelector('[class*="goods_price"]') ||
-        document.querySelector('[class*="GoodsPrice"]');
-      if (priceEl) price = extractCleanPrice(priceEl) || "";
-    }
-
-    // Strategy 3: _1vkz0rqG PjdWJn3s price container (the sale price div from DevTools)
-    if (!price) {
-      // The sale price container has both _1vkz0rqG and PjdWJn3s classes
-      const saleDivs = document.querySelectorAll('[class*="_1vkz0rqG"][class*="PjdWJn3s"],' +
-        ' [class*="PjdWJn3s"][class*="_28K5UOnx"]');
-      for (const container of saleDivs) {
-        const p = extractCleanPrice(container);
-        if (p) { price = p; break; }
-      }
-    }
-
-    // Strategy 4: Any PjdWJn3s container
-    if (!price) {
-      for (const container of document.querySelectorAll('[class*="PjdWJn3s"]')) {
-        const p = extractCleanPrice(container);
-        if (p) { price = p; break; }
-      }
-    }
-
-    // Strategy 5: Last resort — find smallest valid price in price-related elements
-    if (!price) {
-      const priceEls = Array.from(document.querySelectorAll(
-        '#goods_price span, [class*="goods_price"] span, [class*="GoodsPrice"] span'
-      )).filter(el => !isStrikethrough(el) && el.getAttribute("aria-hidden") !== "true"
-                   && !el.querySelector("span"));
-      let smallest = Infinity, smallestText = "";
-      for (const span of priceEls) {
-        const t = span.innerText?.trim().replace(/^[$€£¥₹]/,"");
-        if (t && isValidPrice(t)) {
-          const val = parseFloat(t.replace(/,/g, ""));
-          if (val < smallest) { smallest = val; smallestText = t.replace(/,/g, ""); }
+        const t = (span.innerText || "").trim();
+        if (looksLikePrice(t)) {
+          price = t.replace(/[$€£¥₹,]/g, "");
+          break;
         }
       }
-      if (smallestText) price = smallestText;
     }
 
+    // Fallback: scan all PjdWJn3s divs (Temu price containers)
+    if (!price) {
+      for (const container of document.querySelectorAll('[class*="PjdWJn3s"]')) {
+        const spans = container.querySelectorAll("span");
+        for (const span of spans) {
+          if (hasLineThrough(span)) continue;
+          if (span.getAttribute("aria-hidden") === "true") continue;
+          if (span.querySelector("span")) continue;
+          const t = (span.innerText || "").trim();
+          if (looksLikePrice(t)) {
+            price = t.replace(/[$€£¥₹,]/g, "");
+            break;
+          }
+        }
+        if (price) break;
+      }
+    }
     // SELLER
     let seller = "";
 
