@@ -1,4 +1,4 @@
-// content.js — Temu Product Scraper v16
+// content.js — Temu Product Scraper v16.1
 
 (function() {
   if (window.__temuScraperInjected) return;
@@ -553,30 +553,44 @@
       return false;
     }
 
+    // A valid price must look like: 3.71 or 26.54 or 1,234.56
+    // NOT: 4.0 (star rating), 4 (bare integer), 87 (discount %)
+    function isValidPrice(str) {
+      if (!str) return false;
+      const n = parseFloat(str.replace(/,/g, ""));
+      if (isNaN(n) || n <= 0) return false;
+      // Must have cents (decimal with 2 digits) OR be >= 10 (avoids star ratings like 4.0, 4.7)
+      // Prices like 0.85, 1.48, 3.42, 3.71, 26.54 all pass
+      // Star ratings 4.0, 4.7 fail because they are single digit before decimal
+      if (/^\d{1,2}\.\d{2,}$/.test(str)) return true;  // e.g. 3.71, 26.54
+      if (/^\d{3,}(\.\d+)?$/.test(str.replace(/,/g,""))) return true; // e.g. 1234 or 1234.56
+      if (/^\d+,\d{3}/.test(str)) return true; // comma-thousands format
+      return false;
+    }
+
     function extractCleanPrice(el) {
-      // Walk all spans inside the container, skip struck-through ones
-      const spans = el.querySelectorAll("span");
+      // Walk all spans inside the container, skip struck-through and aria-hidden ones
+      const spans = Array.from(el.querySelectorAll("span"));
       for (const span of spans) {
         if (isStrikethrough(span)) continue;
-        // Skip aria-hidden spans (screen-reader duplicates)
         if (span.getAttribute("aria-hidden") === "true") continue;
-        const t = span.innerText?.trim();
+        // Skip spans that contain child spans (they are wrappers, not leaf price values)
+        if (span.querySelector("span")) continue;
+        const t = span.innerText?.trim().replace(/^[$€£¥₹]/,"");
         if (!t) continue;
-        const m = t.match(/^\$?([\d,.]+)$/);
-        if (m) return m[1].replace(/,/g, "");
+        if (isValidPrice(t)) return t.replace(/,/g, "");
       }
       return null;
     }
 
-    // Strategy 1: Known sale price span class (_14At0Pe5 from DevTools)
-    const salePriceSpan = document.querySelector('span._14At0Pe5, [class*="_14At0Pe5"]');
+    // Strategy 1: Known sale price span (_14At0Pe5 from DevTools) — most reliable
+    const salePriceSpan = document.querySelector('[class*="_14At0Pe5"]');
     if (salePriceSpan && !isStrikethrough(salePriceSpan)) {
-      const t = salePriceSpan.innerText?.trim();
-      const m = t && t.match(/([\d,.]+)/);
-      if (m) price = m[1].replace(/,/g, "");
+      const t = salePriceSpan.innerText?.trim().replace(/^[$€£¥₹]/,"");
+      if (t && isValidPrice(t)) price = t.replace(/,/g, "");
     }
 
-    // Strategy 2: goods_price container — pick first non-strikethrough span
+    // Strategy 2: goods_price container — scan leaf spans, skip strikethrough
     if (!price) {
       const priceEl =
         document.querySelector('#goods_price') ||
@@ -585,28 +599,37 @@
       if (priceEl) price = extractCleanPrice(priceEl) || "";
     }
 
-    // Strategy 3: PjdWJn3s price container (DevTools: _1vkz0rqG PjdWJn3s _28K5UOnx)
+    // Strategy 3: _1vkz0rqG PjdWJn3s price container (the sale price div from DevTools)
     if (!price) {
-      const priceContainers = document.querySelectorAll('[class*="PjdWJn3s"]');
-      for (const container of priceContainers) {
+      // The sale price container has both _1vkz0rqG and PjdWJn3s classes
+      const saleDivs = document.querySelectorAll('[class*="_1vkz0rqG"][class*="PjdWJn3s"],' +
+        ' [class*="PjdWJn3s"][class*="_28K5UOnx"]');
+      for (const container of saleDivs) {
         const p = extractCleanPrice(container);
         if (p) { price = p; break; }
       }
     }
 
-    // Strategy 4: fallback — find the smallest price span that's not struck through
-    // (sale price is typically smaller than MRP)
+    // Strategy 4: Any PjdWJn3s container
     if (!price) {
-      const allPriceSpans = Array.from(document.querySelectorAll(
-        '[class*="price"] span, [class*="Price"] span, [id*="price"] span'
-      )).filter(el => !isStrikethrough(el) && el.getAttribute("aria-hidden") !== "true");
+      for (const container of document.querySelectorAll('[class*="PjdWJn3s"]')) {
+        const p = extractCleanPrice(container);
+        if (p) { price = p; break; }
+      }
+    }
+
+    // Strategy 5: Last resort — find smallest valid price in price-related elements
+    if (!price) {
+      const priceEls = Array.from(document.querySelectorAll(
+        '#goods_price span, [class*="goods_price"] span, [class*="GoodsPrice"] span'
+      )).filter(el => !isStrikethrough(el) && el.getAttribute("aria-hidden") !== "true"
+                   && !el.querySelector("span"));
       let smallest = Infinity, smallestText = "";
-      for (const span of allPriceSpans) {
-        const t = span.innerText?.trim();
-        const m = t && t.match(/^\$?([\d,.]+)$/);
-        if (m) {
-          const val = parseFloat(m[1].replace(/,/g, ""));
-          if (val > 0 && val < smallest) { smallest = val; smallestText = m[1].replace(/,/g, ""); }
+      for (const span of priceEls) {
+        const t = span.innerText?.trim().replace(/^[$€£¥₹]/,"");
+        if (t && isValidPrice(t)) {
+          const val = parseFloat(t.replace(/,/g, ""));
+          if (val < smallest) { smallest = val; smallestText = t.replace(/,/g, ""); }
         }
       }
       if (smallestText) price = smallestText;
@@ -614,6 +637,8 @@
 
     // SELLER
     let seller = "";
+
+    // Strategy 1: Standard store link (_3A4F96VH role="link")
     const storeLink = document.querySelector('[class*="_3A4F96VH"][role="link"]');
     if (storeLink) {
       const label = storeLink.getAttribute("aria-label");
@@ -623,6 +648,37 @@
         if (inner) seller = inner.innerText?.trim().split("\n")[0];
       }
     }
+
+    // Strategy 2: Brand Official Store banner (_3nBusaAC from DevTools)
+    // Text format: "Brand Official Store: HITOZON · Quality assurance"
+    // We extract just the brand name after the colon
+    if (!seller) {
+      const brandStoreSpan = document.querySelector('[class*="_3nBusaAC"]');
+      if (brandStoreSpan) {
+        const t = brandStoreSpan.innerText?.trim();
+        if (t) {
+          // "Brand Official Store: HITOZON · Quality assurance" → "HITOZON"
+          const m = t.match(/Brand Official Store\s*[:\-·]\s*([^·\n]+)/i);
+          if (m) seller = m[1].trim();
+          else seller = t.split("·")[0].replace(/Brand Official Store\s*[:\-]?/i,"").trim();
+        }
+      }
+    }
+
+    // Strategy 3: Brand Official Store from the banner div containing the store name
+    if (!seller) {
+      const brandBanner = Array.from(document.querySelectorAll("div, span")).find(el => {
+        const t = el.innerText?.trim();
+        return t && /Brand Official Store/i.test(t) && t.length < 200;
+      });
+      if (brandBanner) {
+        const t = brandBanner.innerText?.trim();
+        const m = t.match(/Brand Official Store\s*[:\-·]\s*([A-Za-z0-9 &'._-]{2,50})/i);
+        if (m) seller = m[1].trim().split("·")[0].trim();
+      }
+    }
+
+    // Strategy 4: "Sold by" pattern
     if (!seller) {
       const soldByEl = Array.from(document.querySelectorAll("div, span")).find(el => {
         const t = el.innerText?.trim();
@@ -635,6 +691,18 @@
             seller = t.split("\n")[0].trim(); break;
           }
         }
+      }
+    }
+
+    // Strategy 5: "Sourced from" text (some Temu locales use this)
+    if (!seller) {
+      const sourcedEl = Array.from(document.querySelectorAll("span, div")).find(el => {
+        const t = el.innerText?.trim();
+        return t && /Sourced from/i.test(t) && t.length < 150;
+      });
+      if (sourcedEl) {
+        const t = sourcedEl.innerText?.trim().replace(/Sourced from\s*/i,"").trim();
+        if (t && t.length < 80) seller = t.split("\n")[0].trim();
       }
     }
 
