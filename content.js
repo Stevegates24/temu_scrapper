@@ -537,72 +537,114 @@
     await sleep(2500);
 
     // PRICE
-    // Simple rule: find all price-looking spans, skip any that have line-through
-    // on themselves OR any ancestor. Take the first valid one.
+    // Root cause: Temu's price area has TWO divs:
+    //   div._1xoMD3-o  → MRP/original (struck-through) — comes FIRST in DOM
+    //   div._1vkz0rqG  → SALE price (no strike) — comes SECOND
+    // Both contain a span._14At0Pe5 with the number, but only the MRP div's
+    // SIBLING spans have line-through. Checking ancestors alone misses this.
+    //
+    // FIX: Target div._1vkz0rqG (the sale price container) directly.
+    // If that fails, find the price container and skip the first (MRP) child div.
     let price = "";
 
-    function hasLineThrough(el) {
-      let node = el;
-      while (node && node !== document.body) {
+    function spanHasLineThrough(el) {
+      // Check the element itself and its direct parent for line-through
+      for (const node of [el, el.parentElement, el.parentElement?.parentElement]) {
+        if (!node) continue;
         const style = node.getAttribute && (node.getAttribute("style") || "");
-        if (/text-decoration[^;]*line-through/i.test(style)) return true;
+        if (/line-through/i.test(style)) return true;
         try {
-          const cs = window.getComputedStyle(node);
-          const td = (cs.textDecorationLine || cs.textDecoration || "");
+          const td = window.getComputedStyle(node).textDecorationLine || "";
           if (/line-through/i.test(td)) return true;
         } catch(e) {}
-        node = node.parentElement;
+      }
+      // Also check all sibling spans — if ANY sibling has line-through, this is MRP
+      const parent = el.parentElement;
+      if (parent) {
+        for (const sib of parent.querySelectorAll("span")) {
+          if (sib === el) continue;
+          const style = sib.getAttribute("style") || "";
+          if (/line-through/i.test(style)) return true;
+        }
       }
       return false;
     }
 
-    function looksLikePrice(str) {
-      // Must have digits with a decimal point and 2 decimal places: 3.71, 26.54, 0.85
-      // Reject: 4.0 (rating), 9 (bare int), 87 (%), 0.92 (pay-today single digit before dot)
-      if (!str) return false;
-      const clean = str.replace(/[$€£¥₹,]/g, "").trim();
-      // Require pattern: one or more digits, dot, exactly 2 digits (cents)
-      if (!/^\d+\.\d{2}$/.test(clean)) return false;
-      const n = parseFloat(clean);
-      return n > 0 && n < 10000;
+    function extractPriceFromDiv(div) {
+      // Get the leaf span with a valid price number (no line-through context)
+      for (const span of div.querySelectorAll("span")) {
+        if (span.querySelector("span")) continue; // skip wrappers
+        if (span.getAttribute("aria-hidden") === "true") continue;
+        const t = (span.innerText || "").trim().replace(/^[$€£¥₹]/,"");
+        // Must be digits.2digits format: 3.71, 12.69, 76.39
+        if (!/^\d+\.\d{2}$/.test(t)) continue;
+        const n = parseFloat(t);
+        if (n > 0 && n < 100000) return t;
+      }
+      return null;
     }
 
-    // Scan the goods_price container for leaf spans with valid prices, skip line-through
-    const goodsPriceEl =
-      document.querySelector('#goods_price') ||
-      document.querySelector('[class*="goods_price"]') ||
-      document.querySelector('[class*="GoodsPrice"]');
+    // Strategy 1: Target _1vkz0rqG — the sale price div (not the MRP div _1xoMD3-o)
+    // DevTools: div._1vkz0rqG.PjdWJn3s._28K5UOnx contains the sale price
+    const salePriceDiv = document.querySelector('[class*="_1vkz0rqG"]');
+    if (salePriceDiv) {
+      price = extractPriceFromDiv(salePriceDiv) || "";
+    }
 
-    if (goodsPriceEl) {
-      const spans = goodsPriceEl.querySelectorAll("span");
-      for (const span of spans) {
-        if (hasLineThrough(span)) continue;
-        if (span.getAttribute("aria-hidden") === "true") continue;
-        // Skip wrapper spans that contain other spans
-        if (span.querySelector("span")) continue;
-        const t = (span.innerText || "").trim();
-        if (looksLikePrice(t)) {
-          price = t.replace(/[$€£¥₹,]/g, "");
-          break;
+    // Strategy 2: goods_price container — skip the FIRST child div (MRP), use the second
+    if (!price) {
+      const goodsPriceEl =
+        document.querySelector('#goods_price') ||
+        document.querySelector('[class*="goods_price"]') ||
+        document.querySelector('[class*="GoodsPrice"]');
+      if (goodsPriceEl) {
+        // Get all direct child divs — first is MRP, second is sale price
+        const childDivs = Array.from(goodsPriceEl.querySelectorAll(":scope > div, :scope > div > div"));
+        // Try each child div, skip any that contain line-through spans
+        for (const div of childDivs) {
+          const allSpans = div.querySelectorAll("span");
+          const hasStrike = Array.from(allSpans).some(s => {
+            const style = s.getAttribute("style") || "";
+            return /line-through/i.test(style);
+          });
+          if (hasStrike) continue; // this is the MRP div, skip it
+          const p = extractPriceFromDiv(div);
+          if (p) { price = p; break; }
         }
       }
     }
 
-    // Fallback: scan all PjdWJn3s divs (Temu price containers)
+    // Strategy 3: All PjdWJn3s containers — pick the one WITHOUT line-through spans
     if (!price) {
       for (const container of document.querySelectorAll('[class*="PjdWJn3s"]')) {
-        const spans = container.querySelectorAll("span");
-        for (const span of spans) {
-          if (hasLineThrough(span)) continue;
-          if (span.getAttribute("aria-hidden") === "true") continue;
+        const allSpans = container.querySelectorAll("span");
+        const hasStrike = Array.from(allSpans).some(s =>
+          /line-through/i.test(s.getAttribute("style") || "")
+        );
+        if (hasStrike) continue; // skip MRP containers
+        const p = extractPriceFromDiv(container);
+        if (p) { price = p; break; }
+      }
+    }
+
+    // Strategy 4: Last resort — find ALL valid prices on page, take the SMALLEST
+    // Sale price is always less than MRP
+    if (!price) {
+      const goodsPriceEl =
+        document.querySelector('#goods_price') ||
+        document.querySelector('[class*="goods_price"]') ||
+        document.querySelector('[class*="GoodsPrice"]');
+      if (goodsPriceEl) {
+        let smallest = Infinity, smallestStr = "";
+        for (const span of goodsPriceEl.querySelectorAll("span")) {
           if (span.querySelector("span")) continue;
-          const t = (span.innerText || "").trim();
-          if (looksLikePrice(t)) {
-            price = t.replace(/[$€£¥₹,]/g, "");
-            break;
-          }
+          if (span.getAttribute("aria-hidden") === "true") continue;
+          const t = (span.innerText || "").trim().replace(/^[$€£¥₹]/,"");
+          if (!/^\d+\.\d{2}$/.test(t)) continue;
+          const n = parseFloat(t);
+          if (n > 0 && n < smallest) { smallest = n; smallestStr = t; }
         }
-        if (price) break;
+        if (smallestStr) price = smallestStr;
       }
     }
     // SELLER
