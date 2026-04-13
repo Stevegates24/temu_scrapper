@@ -537,14 +537,79 @@
     await sleep(2500);
 
     // PRICE
+    // Strategy: find the sale price, explicitly skipping struck-through elements.
+    // DevTools shows the actual price is in span._14At0Pe5 inside the _1vkz0rqG
+    // price container, while the MRP/original has style="...line-through..."
     let price = "";
-    const priceEl =
-      document.querySelector('#goods_price') ||
-      document.querySelector('[class*="goods_price"]') ||
-      document.querySelector('[class*="GoodsPrice"]');
-    if (priceEl) {
-      const match = priceEl.innerText.trim().match(/[\d,.]+/);
-      if (match) price = match[0].replace(/,/g, "");
+
+    function isStrikethrough(el) {
+      const style = el.getAttribute("style") || "";
+      if (/line-through/i.test(style)) return true;
+      try {
+        const computed = window.getComputedStyle(el);
+        if (/line-through/i.test(computed.textDecorationLine || "")) return true;
+        if (/line-through/i.test(computed.textDecoration || "")) return true;
+      } catch(e) {}
+      return false;
+    }
+
+    function extractCleanPrice(el) {
+      // Walk all spans inside the container, skip struck-through ones
+      const spans = el.querySelectorAll("span");
+      for (const span of spans) {
+        if (isStrikethrough(span)) continue;
+        // Skip aria-hidden spans (screen-reader duplicates)
+        if (span.getAttribute("aria-hidden") === "true") continue;
+        const t = span.innerText?.trim();
+        if (!t) continue;
+        const m = t.match(/^\$?([\d,.]+)$/);
+        if (m) return m[1].replace(/,/g, "");
+      }
+      return null;
+    }
+
+    // Strategy 1: Known sale price span class (_14At0Pe5 from DevTools)
+    const salePriceSpan = document.querySelector('span._14At0Pe5, [class*="_14At0Pe5"]');
+    if (salePriceSpan && !isStrikethrough(salePriceSpan)) {
+      const t = salePriceSpan.innerText?.trim();
+      const m = t && t.match(/([\d,.]+)/);
+      if (m) price = m[1].replace(/,/g, "");
+    }
+
+    // Strategy 2: goods_price container — pick first non-strikethrough span
+    if (!price) {
+      const priceEl =
+        document.querySelector('#goods_price') ||
+        document.querySelector('[class*="goods_price"]') ||
+        document.querySelector('[class*="GoodsPrice"]');
+      if (priceEl) price = extractCleanPrice(priceEl) || "";
+    }
+
+    // Strategy 3: PjdWJn3s price container (DevTools: _1vkz0rqG PjdWJn3s _28K5UOnx)
+    if (!price) {
+      const priceContainers = document.querySelectorAll('[class*="PjdWJn3s"]');
+      for (const container of priceContainers) {
+        const p = extractCleanPrice(container);
+        if (p) { price = p; break; }
+      }
+    }
+
+    // Strategy 4: fallback — find the smallest price span that's not struck through
+    // (sale price is typically smaller than MRP)
+    if (!price) {
+      const allPriceSpans = Array.from(document.querySelectorAll(
+        '[class*="price"] span, [class*="Price"] span, [id*="price"] span'
+      )).filter(el => !isStrikethrough(el) && el.getAttribute("aria-hidden") !== "true");
+      let smallest = Infinity, smallestText = "";
+      for (const span of allPriceSpans) {
+        const t = span.innerText?.trim();
+        const m = t && t.match(/^\$?([\d,.]+)$/);
+        if (m) {
+          const val = parseFloat(m[1].replace(/,/g, ""));
+          if (val > 0 && val < smallest) { smallest = val; smallestText = m[1].replace(/,/g, ""); }
+        }
+      }
+      if (smallestText) price = smallestText;
     }
 
     // SELLER
